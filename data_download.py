@@ -27,14 +27,16 @@ def download(url, filename, cookies=None):
     sys.stdout.write('\n')
 
 
-drive_request = requests.get(
-    'https://drive.google.com/uc?export=download&confirm=CONFIRM&id=1MxCUvKxejnwWnoZ-KoCyMCXo3TLhRuTo')
-confirm_page = drive_request.text
-confirmation_code = re.findall('confirm=(.{4})', confirm_page)[0]
+# drive_request = requests.get(
+#     'https://drive.google.com/uc?export=download&confirm=CONFIRM&id=1MxCUvKxejnwWnoZ-KoCyMCXo3TLhRuTo')
 
-print('[*] Downloading data...')
-download('https://drive.google.com/uc?export=download&confirm=CONFIRM&id=1MxCUvKxejnwWnoZ-KoCyMCXo3TLhRuTo'.replace(
-    'CONFIRM', confirmation_code), 'data/viton_resize.tar.gz', cookies=drive_request.cookies)
+# confirm_page = drive_request.text
+
+# confirmation_code = re.findall('confirm=(.{4})', confirm_page)[0]
+
+# print('[*] Downloading data...')
+# download('https://drive.google.com/uc?export=download&confirm=CONFIRM&id=1MxCUvKxejnwWnoZ-KoCyMCXo3TLhRuTo'.replace(
+#     'CONFIRM', confirmation_code), 'data/viton_resize.tar.gz', cookies=drive_request.cookies)
 
 tarfile.open("data/viton_resize.tar.gz").extractall(path='data/')
 
@@ -42,4 +44,4 @@ shutil.move('data/viton_resize/test/', 'data/test/')
 shutil.move('data/viton_resize/train/', 'data/train/')
 
 os.rmdir('data/viton_resize/')
-os.remove('data/viton_resize.tar.gz')
+# os.remove('data/viton_resize.tar.gz')

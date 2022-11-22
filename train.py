@@ -6,18 +6,23 @@ import torch.nn.functional as F
 import argparse
 import os
 import time
+from tqdm import tqdm
 from cp_dataset import CPDataset, CPDataLoader
 from networks import GMM, UnetGenerator, VGGLoss, load_checkpoint, save_checkpoint
 
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 from visualization import board_add_image, board_add_images
 
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+
+dist.init_process_group("nccl")
+gpus_id = int(os.environ["LOCAL_RANK"])
 
 def get_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument("--name", default = "GMM")
-    parser.add_argument("--gpu_ids", default = "")
-    parser.add_argument('-j', '--workers', type=int, default=1)
+    parser.add_argument('-j', '--workers', type=int, default=4)
     parser.add_argument('-b', '--batch-size', type=int, default=4)
     
     parser.add_argument("--dataroot", default = "data")
@@ -42,7 +47,7 @@ def get_opt():
     return opt
 
 def train_gmm(opt, train_loader, model, board):
-    model.cuda()
+    model = DDP(model.to(gpus_id), [gpus_id])
     model.train()
 
     # criterion
@@ -53,24 +58,25 @@ def train_gmm(opt, train_loader, model, board):
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = lambda step: 1.0 -
             max(0, step - opt.keep_step) / float(opt.decay_step + 1))
     
-    for step in range(opt.keep_step + opt.decay_step):
-        iter_start_time = time.time()
+    for epoch in tqdm(range(opt.keep_step + opt.decay_step)):
+        train_loader.data_loader.sampler.set_epoch(epoch)
+        # iter_start_time = time.time()
         inputs = train_loader.next_batch()
             
-        im = inputs['image'].cuda()
-        im_pose = inputs['pose_image'].cuda()
-        im_h = inputs['head'].cuda()
-        shape = inputs['shape'].cuda()
-        agnostic = inputs['agnostic'].cuda()
-        c = inputs['cloth'].cuda()
-        cm = inputs['cloth_mask'].cuda()
-        im_c =  inputs['parse_cloth'].cuda()
-        im_g = inputs['grid_image'].cuda()
-            
+        im = inputs['image'].to(gpus_id) # [4, 3, 256, 192]
+        im_pose = inputs['pose_image'].to(gpus_id) # [4, 1, 256, 192]
+        im_h = inputs['head'].to(gpus_id) # [4, 3, 256, 192]
+        shape = inputs['shape'].to(gpus_id) # [4, 1, 256, 192]
+        agnostic = inputs['agnostic'].to(gpus_id) # [4, 22, 256, 192]
+        c = inputs['cloth'].to(gpus_id) # [4, 3, 256, 192]
+        cm = inputs['cloth_mask'].to(gpus_id) # [4, 1, 256, 192]
+        im_c =  inputs['parse_cloth'].to(gpus_id) # [4, 3, 256, 192]
+        im_g = inputs['grid_image'].to(gpus_id) # [4, 3, 256, 192]
+        
         grid, theta = model(agnostic, c)
-        warped_cloth = F.grid_sample(c, grid, padding_mode='border')
-        warped_mask = F.grid_sample(cm, grid, padding_mode='zeros')
-        warped_grid = F.grid_sample(im_g, grid, padding_mode='zeros')
+        warped_cloth = F.grid_sample(c, grid, padding_mode='border', align_corners=True)
+        warped_mask = F.grid_sample(cm, grid, padding_mode='zeros', align_corners=True)
+        warped_grid = F.grid_sample(im_g, grid, padding_mode='zeros', align_corners=True)
 
         visuals = [ [im_h, shape, im_pose], 
                    [c, warped_cloth, im_c], 
@@ -81,18 +87,18 @@ def train_gmm(opt, train_loader, model, board):
         loss.backward()
         optimizer.step()
             
-        if (step+1) % opt.display_count == 0:
-            board_add_images(board, 'combine', visuals, step+1)
-            board.add_scalar('metric', loss.item(), step+1)
-            t = time.time() - iter_start_time
-            print('step: %8d, time: %.3f, loss: %4f' % (step+1, t, loss.item()), flush=True)
+        if (epoch+1) % opt.display_count == 0:
+            board_add_images(board, 'combine', visuals, epoch+1)
+            board.add_scalar('metric', loss.item(), epoch+1)
+            # t = time.time() - iter_start_time
+            # print('step: %8d, time: %.3f, loss: %4f' % (epoch+1, t, loss.item()), flush=True)
 
-        if (step+1) % opt.save_count == 0:
-            save_checkpoint(model, os.path.join(opt.checkpoint_dir, opt.name, 'step_%06d.pth' % (step+1)))
+        if (epoch+1) % opt.save_count == 0:
+            save_checkpoint(model, os.path.join(opt.checkpoint_dir, opt.name, 'step_%06d.pth' % (epoch+1)))
 
 
 def train_tom(opt, train_loader, model, board):
-    model.cuda()
+    model.to(gpus_id)
     model.train()
     
     # criterion
@@ -109,14 +115,14 @@ def train_tom(opt, train_loader, model, board):
         iter_start_time = time.time()
         inputs = train_loader.next_batch()
             
-        im = inputs['image'].cuda()
+        im = inputs['image'].to(gpus_id)
         im_pose = inputs['pose_image']
         im_h = inputs['head']
         shape = inputs['shape']
 
-        agnostic = inputs['agnostic'].cuda()
-        c = inputs['cloth'].cuda()
-        cm = inputs['cloth_mask'].cuda()
+        agnostic = inputs['agnostic'].to(gpus_id)
+        c = inputs['cloth'].to(gpus_id)
+        cm = inputs['cloth_mask'].to(gpus_id)
         
         outputs = model(torch.cat([agnostic, c],1))
         p_rendered, m_composite = torch.split(outputs, 3,1)
@@ -154,7 +160,6 @@ def train_tom(opt, train_loader, model, board):
 
 def main():
     opt = get_opt()
-    print(opt)
     print("Start to train stage: %s, named: %s!" % (opt.stage, opt.name))
    
     # create dataset 
@@ -166,20 +171,21 @@ def main():
     # visualization
     if not os.path.exists(opt.tensorboard_dir):
         os.makedirs(opt.tensorboard_dir)
-    board = SummaryWriter(log_dir = os.path.join(opt.tensorboard_dir, opt.name))
-   
+
+    writer = SummaryWriter(os.path.join(opt.tensorboard_dir, opt.name))
+    
     # create model & train & save the final checkpoint
     if opt.stage == 'GMM':
         model = GMM(opt)
         if not opt.checkpoint =='' and os.path.exists(opt.checkpoint):
             load_checkpoint(model, opt.checkpoint)
-        train_gmm(opt, train_loader, model, board)
+        train_gmm(opt, train_loader, model, writer)
         save_checkpoint(model, os.path.join(opt.checkpoint_dir, opt.name, 'gmm_final.pth'))
     elif opt.stage == 'TOM':
         model = UnetGenerator(25, 4, 6, ngf=64, norm_layer=nn.InstanceNorm2d)
         if not opt.checkpoint =='' and os.path.exists(opt.checkpoint):
             load_checkpoint(model, opt.checkpoint)
-        train_tom(opt, train_loader, model, board)
+        train_tom(opt, train_loader, model, writer)
         save_checkpoint(model, os.path.join(opt.checkpoint_dir, opt.name, 'tom_final.pth'))
     else:
         raise NotImplementedError('Model [%s] is not implemented' % opt.stage)
