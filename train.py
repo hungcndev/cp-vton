@@ -22,7 +22,7 @@ gpus_id = int(os.environ["LOCAL_RANK"])
 def get_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument("--name", default = "GMM")
-    parser.add_argument('-j', '--workers', type=int, default=4)
+    parser.add_argument('-j', '--workers', type=int, default=6)
     parser.add_argument('-b', '--batch-size', type=int, default=4)
     
     parser.add_argument("--dataroot", default = "data")

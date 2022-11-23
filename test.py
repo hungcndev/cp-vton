@@ -9,7 +9,7 @@ import time
 from cp_dataset import CPDataset, CPDataLoader
 from networks import GMM, UnetGenerator, load_checkpoint
 
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 from visualization import board_add_image, board_add_images, save_images
 
 
