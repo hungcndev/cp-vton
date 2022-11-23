@@ -4,7 +4,7 @@ Reimplemented code for eccv2018 paper 'Toward Characteristic-Preserving Image-ba
 
 The results may have some differences with those of the original code.
 
-This code is tested with pytorch=0.4.0
+This code is tested with ~~pytorch=0.4.0~~ -> pytorch current version ( i run 1.12.1+cu116 version )
 
 ## Data preprocessing
 
