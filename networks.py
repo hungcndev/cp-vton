@@ -432,9 +432,9 @@ class GMM(nn.Module):
     """
     def __init__(self, opt):
         super(GMM, self).__init__()
-        # Person Representation p (22x256x192) -> 
+        # Person Representation p (22x256x192) -> (512x16x12)
         self.extractionA = FeatureExtraction(22, ngf=64, n_layers=3, norm_layer=nn.BatchNorm2d) 
-        # In-shop Clothes c (3x256x192)
+        # In-shop Clothes c (3x256x192) -> (512x16x12)
         self.extractionB = FeatureExtraction(3, ngf=64, n_layers=3, norm_layer=nn.BatchNorm2d)
         self.l2norm = FeatureL2Norm()
         self.correlation = FeatureCorrelation()
