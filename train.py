@@ -98,7 +98,7 @@ def train_gmm(opt, train_loader, model, board):
 
 
 def train_tom(opt, train_loader, model, board):
-    model.to(gpus_id)
+    model = DDP(model.to(gpus_id), [gpus_id])
     model.train()
     
     # criterion
@@ -111,8 +111,9 @@ def train_tom(opt, train_loader, model, board):
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = lambda step: 1.0 -
             max(0, step - opt.keep_step) / float(opt.decay_step + 1))
     
-    for step in range(opt.keep_step + opt.decay_step):
-        iter_start_time = time.time()
+    for step in tqdm(range(opt.keep_step + opt.decay_step)):
+        train_loader.data_loader.sampler.set_epoch(step)
+        # iter_start_time = time.time()
         inputs = train_loader.next_batch()
             
         im = inputs['image'].to(gpus_id)
@@ -126,8 +127,8 @@ def train_tom(opt, train_loader, model, board):
         
         outputs = model(torch.cat([agnostic, c],1))
         p_rendered, m_composite = torch.split(outputs, 3,1)
-        p_rendered = F.tanh(p_rendered)
-        m_composite = F.sigmoid(m_composite)
+        p_rendered = torch.tanh(p_rendered)
+        m_composite = torch.sigmoid(m_composite)
         p_tryon = c * m_composite+ p_rendered * (1 - m_composite)
 
         visuals = [ [im_h, shape, im_pose], 
@@ -148,10 +149,10 @@ def train_tom(opt, train_loader, model, board):
             board.add_scalar('L1', loss_l1.item(), step+1)
             board.add_scalar('VGG', loss_vgg.item(), step+1)
             board.add_scalar('MaskL1', loss_mask.item(), step+1)
-            t = time.time() - iter_start_time
-            print('step: %8d, time: %.3f, loss: %.4f, l1: %.4f, vgg: %.4f, mask: %.4f' 
-                    % (step+1, t, loss.item(), loss_l1.item(), 
-                    loss_vgg.item(), loss_mask.item()), flush=True)
+            # t = time.time() - iter_start_time
+            # print('step: %8d, time: %.3f, loss: %.4f, l1: %.4f, vgg: %.4f, mask: %.4f' 
+            #         % (step+1, t, loss.item(), loss_l1.item(), 
+            #         loss_vgg.item(), loss_mask.item()), flush=True)
 
         if (step+1) % opt.save_count == 0:
             save_checkpoint(model, os.path.join(opt.checkpoint_dir, opt.name, 'step_%06d.pth' % (step+1)))

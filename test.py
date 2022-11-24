@@ -5,6 +5,7 @@ import torch.nn.functional as F
 
 import argparse
 import os
+from tqdm import tqdm
 import time
 from cp_dataset import CPDataset, CPDataLoader
 from networks import GMM, UnetGenerator, load_checkpoint
@@ -12,16 +13,21 @@ from networks import GMM, UnetGenerator, load_checkpoint
 from torch.utils.tensorboard import SummaryWriter
 from visualization import board_add_image, board_add_images, save_images
 
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+
+dist.init_process_group("nccl")
+gpus_id = int(os.environ["LOCAL_RANK"])
 
 def get_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument("--name", default = "GMM")
     parser.add_argument("--gpu_ids", default = "")
-    parser.add_argument('-j', '--workers', type=int, default=1)
+    parser.add_argument('-j', '--workers', type=int, default=6)
     parser.add_argument('-b', '--batch-size', type=int, default=4)
     
     parser.add_argument("--dataroot", default = "data")
-    parser.add_argument("--datamode", default = "train")
+    parser.add_argument("--datamode", default = "test")
     parser.add_argument("--stage", default = "GMM")
     parser.add_argument("--data_list", default = "train_pairs.txt")
     parser.add_argument("--fine_width", type=int, default = 192)
@@ -30,7 +36,7 @@ def get_opt():
     parser.add_argument("--grid_size", type=int, default = 5)
     parser.add_argument('--tensorboard_dir', type=str, default='tensorboard', help='save tensorboard infos')
     parser.add_argument('--result_dir', type=str, default='result', help='save result infos')
-    parser.add_argument('--checkpoint', type=str, default='', help='model checkpoint for test')
+    parser.add_argument('--checkpoint', type=str, default='checkpoints/test/TOM/gmm_final.pth', help='model checkpoint for test')
     parser.add_argument("--display_count", type=int, default = 1)
     parser.add_argument("--shuffle", action='store_true', help='shuffle input data')
 
@@ -38,22 +44,27 @@ def get_opt():
     return opt
 
 def test_gmm(opt, test_loader, model, board):
-    model.cuda()
+    model = DDP(model.cuda(), [gpus_id])
     model.eval()
 
     base_name = os.path.basename(opt.checkpoint)
-    save_dir = os.path.join(opt.result_dir, base_name, opt.datamode)
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
+    # save_dir = os.path.join(opt.result_dir, base_name, opt.datamode)
+    save_dir = "data/test"
+
+    # if not os.path.exists(save_dir):
+    #     os.makedirs(save_dir)
+
     warp_cloth_dir = os.path.join(save_dir, 'warp-cloth')
+    warp_mask_dir = os.path.join(save_dir, 'warp-mask')
+
     if not os.path.exists(warp_cloth_dir):
         os.makedirs(warp_cloth_dir)
-    warp_mask_dir = os.path.join(save_dir, 'warp-mask')
     if not os.path.exists(warp_mask_dir):
         os.makedirs(warp_mask_dir)
 
     for step, inputs in enumerate(test_loader.data_loader):
-        iter_start_time = time.time()
+        test_loader.data_loader.sampler.set_epoch(step)
+        # iter_start_time = time.time()
         
         c_names = inputs['c_name']
         im = inputs['image'].cuda()
@@ -67,9 +78,9 @@ def test_gmm(opt, test_loader, model, board):
         im_g = inputs['grid_image'].cuda()
             
         grid, theta = model(agnostic, c)
-        warped_cloth = F.grid_sample(c, grid, padding_mode='border')
-        warped_mask = F.grid_sample(cm, grid, padding_mode='zeros')
-        warped_grid = F.grid_sample(im_g, grid, padding_mode='zeros')
+        warped_cloth = F.grid_sample(c, grid, padding_mode='border', align_corners=True)
+        warped_mask = F.grid_sample(cm, grid, padding_mode='zeros', align_corners=True)
+        warped_grid = F.grid_sample(im_g, grid, padding_mode='zeros', align_corners=True)
 
         visuals = [ [im_h, shape, im_pose], 
                    [c, warped_cloth, im_c], 
@@ -80,25 +91,28 @@ def test_gmm(opt, test_loader, model, board):
 
         if (step+1) % opt.display_count == 0:
             board_add_images(board, 'combine', visuals, step+1)
-            t = time.time() - iter_start_time
-            print('step: %8d, time: %.3f' % (step+1, t), flush=True)
+            # t = time.time() - iter_start_time
+            # print('step: %8d, time: %.3f' % (step+1, t), flush=True)
         
 
 
 def test_tom(opt, test_loader, model, board):
-    model.cuda()
+    model = DDP(model.cuda(), [gpus_id]
     model.eval()
     
     base_name = os.path.basename(opt.checkpoint)
     save_dir = os.path.join(opt.result_dir, base_name, opt.datamode)
+    try_on_dir = os.path.join(save_dir, 'try-on')
+
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
-    try_on_dir = os.path.join(save_dir, 'try-on')
     if not os.path.exists(try_on_dir):
         os.makedirs(try_on_dir)
-    print('Dataset size: %05d!' % (len(test_loader.dataset)), flush=True)
+
+    # print('Dataset size: %05d!' % (len(test_loader.dataset)), flush=True)
+
     for step, inputs in enumerate(test_loader.data_loader):
-        iter_start_time = time.time()
+        # iter_start_time = time.time()
         
         im_names = inputs['im_name']
         im = inputs['image'].cuda()
@@ -112,8 +126,8 @@ def test_tom(opt, test_loader, model, board):
         
         outputs = model(torch.cat([agnostic, c],1))
         p_rendered, m_composite = torch.split(outputs, 3,1)
-        p_rendered = F.tanh(p_rendered)
-        m_composite = F.sigmoid(m_composite)
+        p_rendered = torch.tanh(p_rendered)
+        m_composite = torch.sigmoid(m_composite)
         p_tryon = c * m_composite + p_rendered * (1 - m_composite)
 
         visuals = [ [im_h, shape, im_pose], 
@@ -123,8 +137,8 @@ def test_tom(opt, test_loader, model, board):
         save_images(p_tryon, im_names, try_on_dir) 
         if (step+1) % opt.display_count == 0:
             board_add_images(board, 'combine', visuals, step+1)
-            t = time.time() - iter_start_time
-            print('step: %8d, time: %.3f' % (step+1, t), flush=True)
+            # t = time.time() - iter_start_time
+            # print('step: %8d, time: %.3f' % (step+1, t), flush=True)
 
 
 def main():

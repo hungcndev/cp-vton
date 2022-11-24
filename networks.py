@@ -65,7 +65,15 @@ class FeatureExtraction(nn.Module):
             ]
 
         for i in range(n_layers):
+            # 0, 1, 2
+            ## 0 : 1 * 64 if 1 * 64 < 512 else 512
+            ## 1 : 2 * 64 if 2 * 64 < 512 else 512
+            ## 2 : 4 * 64 if 4 * 64 < 512 else 512
             in_ngf = 2**i * ngf if 2**i * ngf < 512 else 512
+            
+            ## 0 : 2 * 64 if 1 * 64 < 512 else 512
+            ## 1 : 4 * 64 if 2 * 64 < 512 else 512
+            ## 2 : 8 * 64 if 4 * 64 < 512 else 512
             out_ngf = 2**(i+1) * ngf if 2**i * ngf < 512 else 512
 
             model += [
@@ -369,7 +377,9 @@ class UnetSkipConnectionBlock(nn.Module):
 class Vgg19(nn.Module):
     def __init__(self, requires_grad=False):
         super(Vgg19, self).__init__()
-        vgg_pretrained_features = models.vgg19(pretrained=True).features
+        # vgg_pretrained_features = models.vgg19(pretrained=True).features
+        vgg_pretrained_features = models.vgg19(weights=models.VGG19_Weights.DEFAULT).features
+
         self.slice1 = torch.nn.Sequential()
         self.slice2 = torch.nn.Sequential()
         self.slice3 = torch.nn.Sequential()
@@ -422,7 +432,9 @@ class GMM(nn.Module):
     """
     def __init__(self, opt):
         super(GMM, self).__init__()
+        # Person Representation p (22x256x192) -> 
         self.extractionA = FeatureExtraction(22, ngf=64, n_layers=3, norm_layer=nn.BatchNorm2d) 
+        # In-shop Clothes c (3x256x192)
         self.extractionB = FeatureExtraction(3, ngf=64, n_layers=3, norm_layer=nn.BatchNorm2d)
         self.l2norm = FeatureL2Norm()
         self.correlation = FeatureCorrelation()
