@@ -122,6 +122,7 @@ class FeatureCorrelation(nn.Module):
 class FeatureRegression(nn.Module):
     def __init__(self, in_channels=512,output_dim=6, use_cuda=True):
         super(FeatureRegression, self).__init__()
+        # 4 x 192 x 16 x 12
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, 512, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(512),
@@ -200,8 +201,7 @@ class TpsGridGen(nn.Module):
                 self.P_Y = self.P_Y.cuda()
                 self.P_X_base = self.P_X_base.cuda()
                 self.P_Y_base = self.P_Y_base.cuda()
-
-            
+        
     def forward(self, theta):
         warped_grid = self.apply_transformation(theta,torch.cat((self.grid_X,self.grid_Y),3))
         
