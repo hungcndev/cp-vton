@@ -110,29 +110,38 @@ class FeatureCorrelation(nn.Module):
         super(FeatureCorrelation, self).__init__()
     
     def forward(self, feature_A, feature_B):
+        # bx512x16x12
         b,c,h,w = feature_A.size()
         # reshape features for matrix multiplication
+        # bx512x16x12 -> bx512x12x16 -> bx512x12x16 -> bx512x192
         feature_A = feature_A.transpose(2,3).contiguous().view(b,c,h*w)
+        # bx512x16x12 -> bx512x192 -> bx192x512
         feature_B = feature_B.view(b,c,h*w).transpose(1,2)
         # perform matrix mult.
+        # bx192x512 @ bx512x192 => bx192x192
         feature_mul = torch.bmm(feature_B,feature_A)
+        # bx192x512 -> bx16x12x192 -> bx192x16x12
         correlation_tensor = feature_mul.view(b,h,w,h*w).transpose(2,3).transpose(1,2)
         return correlation_tensor
     
 class FeatureRegression(nn.Module):
-    def __init__(self, in_channels=512,output_dim=6, use_cuda=True):
+    def __init__(self, in_channels=512, output_dim=6, use_cuda=True):
         super(FeatureRegression, self).__init__()
-        # 4 x 192 x 16 x 12
+        
         self.conv = nn.Sequential(
+            # b x 192 x 16 x 12 -> b x 512 x 8 x 6
             nn.Conv2d(in_channels, 512, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(512),
             nn.ReLU(inplace=True),
+            # b x 512 x 8 x  6 -> b x 256 x 4 x 3
             nn.Conv2d(512, 256, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(256),
             nn.ReLU(inplace=True),
+            # b x 256 x 4 x 3 -> b x 128 x 4 x 3
             nn.Conv2d(256, 128, kernel_size=3, padding=1),
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
+            # b x 128 x 4 x 3 -> b x 64 x 4 x 3
             nn.Conv2d(128, 64, kernel_size=3, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
@@ -145,8 +154,11 @@ class FeatureRegression(nn.Module):
             self.tanh.cuda()
 
     def forward(self, x):
+        # b x 192 x 16 x 12 -> b x 64 x 4 x 3
         x = self.conv(x)
+        # b x 64 * 4 * 3
         x = x.reshape(x.size(0), -1)
+        # b x 64 * 4 * 3 -> 50
         x = self.linear(x)
         x = self.tanh(x)
         return x
@@ -448,9 +460,9 @@ class GMM(nn.Module):
         # 3x256x192 -> 512x16x12
         featureB = self.extractionB(inputB)
         featureB = self.l2norm(featureB)
-        
+        # bx512x16x12 -> bx192x16x12 -> b x 50
         correlation = self.correlation(featureA, featureB)
-
+        # bx192x16x12 -> b x 50
         theta = self.regression(correlation)
         grid = self.gridGen(theta)
         return grid, theta
@@ -468,3 +480,5 @@ def load_checkpoint(model, checkpoint_path):
     model.load_state_dict(torch.load(checkpoint_path))
     model.cuda()
 
+if __name__ == "__main__":
+    print(2 * 5**2)

@@ -29,8 +29,8 @@ class CPDataset(data.Dataset):
         self.transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize(
-                mean=(0.5, 0.5, 0.5), 
-                std=(0.5, 0.5, 0.5)
+                mean=(0.5, ), 
+                std=(0.5, )
             )
         ])
 
@@ -57,10 +57,10 @@ class CPDataset(data.Dataset):
         im_name = self.im_names[index]
 
         # cloth image & cloth mask
-        if self.stage == 'GMM':
+        if self.stage == 'GMM': #Geometric Matching Module
             c = Image.open(os.path.join(self.data_path, 'cloth', c_name))
             cm = Image.open(os.path.join(self.data_path, 'cloth-mask', c_name))
-        else:
+        else:  # Try-on Module
             c = Image.open(os.path.join(self.data_path, 'warp-cloth', c_name))
             cm = Image.open(os.path.join(self.data_path, 'warp-mask', c_name))
         

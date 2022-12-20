@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 import argparse
 import os
-import time
+
 from tqdm import tqdm
 from cp_dataset import CPDataset, CPDataLoader
 from networks import GMM, UnetGenerator, VGGLoss, load_checkpoint, save_checkpoint
@@ -55,12 +55,11 @@ def train_gmm(opt, train_loader, model, board):
     
     # optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(0.5, 0.999))
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = lambda step: 1.0 -
-            max(0, step - opt.keep_step) / float(opt.decay_step + 1))
+    # scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = lambda step: 1.0 -
+    #         max(0, step - opt.keep_step) / float(opt.decay_step + 1))
     
     for epoch in tqdm(range(opt.keep_step + opt.decay_step)):
         train_loader.data_loader.sampler.set_epoch(epoch)
-        # iter_start_time = time.time()
         inputs = train_loader.next_batch()
             
         im = inputs['image'].to(gpus_id) # [4, 3, 256, 192]
@@ -90,8 +89,6 @@ def train_gmm(opt, train_loader, model, board):
         if (epoch+1) % opt.display_count == 0:
             board_add_images(board, 'combine', visuals, epoch+1)
             board.add_scalar('metric', loss.item(), epoch+1)
-            # t = time.time() - iter_start_time
-            # print('step: %8d, time: %.3f, loss: %4f' % (epoch+1, t, loss.item()), flush=True)
 
         if (epoch+1) % opt.save_count == 0:
             save_checkpoint(model, os.path.join(opt.checkpoint_dir, opt.name, 'step_%06d.pth' % (epoch+1)))
@@ -113,7 +110,6 @@ def train_tom(opt, train_loader, model, board):
     
     for step in tqdm(range(opt.keep_step + opt.decay_step)):
         train_loader.data_loader.sampler.set_epoch(step)
-        # iter_start_time = time.time()
         inputs = train_loader.next_batch()
             
         im = inputs['image'].to(gpus_id)
@@ -149,10 +145,6 @@ def train_tom(opt, train_loader, model, board):
             board.add_scalar('L1', loss_l1.item(), step+1)
             board.add_scalar('VGG', loss_vgg.item(), step+1)
             board.add_scalar('MaskL1', loss_mask.item(), step+1)
-            # t = time.time() - iter_start_time
-            # print('step: %8d, time: %.3f, loss: %.4f, l1: %.4f, vgg: %.4f, mask: %.4f' 
-            #         % (step+1, t, loss.item(), loss_l1.item(), 
-            #         loss_vgg.item(), loss_mask.item()), flush=True)
 
         if (step+1) % opt.save_count == 0:
             save_checkpoint(model, os.path.join(opt.checkpoint_dir, opt.name, 'step_%06d.pth' % (step+1)))
