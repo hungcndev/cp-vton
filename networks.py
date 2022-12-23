@@ -179,33 +179,39 @@ class AffineGridGen(nn.Module):
 class TpsGridGen(nn.Module):
     def __init__(self, out_h=256, out_w=192, use_regular_grid=True, grid_size=3, reg_factor=0, use_cuda=True):
         super(TpsGridGen, self).__init__()
-        self.out_h, self.out_w = out_h, out_w
-        self.reg_factor = reg_factor
         self.use_cuda = use_cuda
 
-        # create grid in numpy
-        self.grid = np.zeros( [self.out_h, self.out_w, 3], dtype=np.float32)
+        # create grid in torch
+        # 3x256x192
+        self.grid = torch.zeros((3, out_h, out_w), dtype=torch.float)
         # sampling grid with dim-0 coords (Y)
-        self.grid_X,self.grid_Y = np.meshgrid(np.linspace(-1,1,out_w),np.linspace(-1,1,out_h))
-        # grid_X,grid_Y: size [1,H,W,1,1]
-        self.grid_X = torch.FloatTensor(self.grid_X).unsqueeze(0).unsqueeze(3)
-        self.grid_Y = torch.FloatTensor(self.grid_Y).unsqueeze(0).unsqueeze(3)
+        x = torch.linspace(-1, 1, steps=out_h)  # 256
+        y = torch.linspace(-1, 1, steps=out_w)  # 192
+        grid_X, grid_Y = torch.meshgrid(x, y, indexing="ij")
+        # grid_X,grid_Y: size [1,H,W,1]
+        self.grid_X = grid_X.unsqueeze(0).unsqueeze(3) # 1, 256, 192, 1
+        self.grid_Y = grid_Y.unsqueeze(0).unsqueeze(3) # 1, 256, 192, 1
+
         if use_cuda:
             self.grid_X = self.grid_X.cuda()
             self.grid_Y = self.grid_Y.cuda()
 
         # initialize regular grid for control points P_i
         if use_regular_grid:
-            axis_coords = np.linspace(-1,1,grid_size)
-            self.N = grid_size*grid_size
-            P_Y,P_X = np.meshgrid(axis_coords,axis_coords)
-            P_X = np.reshape(P_X,(-1,1)) # size (N,1)
-            P_Y = np.reshape(P_Y,(-1,1)) # size (N,1)
-            P_X = torch.FloatTensor(P_X)
-            P_Y = torch.FloatTensor(P_Y)
+            axis_coords = torch.linspace(-1, 1, steps=grid_size) # 5
+
+            self.N = grid_size*grid_size # 25
+            # (5x5, 5x5)
+            P_X, P_Y = torch.meshgrid(axis_coords, axis_coords, indexing='ij')
+
+            P_X = P_X.reshape(-1, 1) # 25x1
+            P_Y = P_Y.reshape(-1, 1) # 25x1
+
             self.P_X_base = P_X.clone()
             self.P_Y_base = P_Y.clone()
-            self.Li = self.compute_L_inverse(P_X,P_Y).unsqueeze(0)
+
+            self.Li = self.compute_L_inverse(P_X, P_Y).unsqueeze(0)
+
             self.P_X = P_X.unsqueeze(2).unsqueeze(3).unsqueeze(4).transpose(0,4)
             self.P_Y = P_Y.unsqueeze(2).unsqueeze(3).unsqueeze(4).transpose(0,4)
             if use_cuda:
@@ -215,26 +221,38 @@ class TpsGridGen(nn.Module):
                 self.P_Y_base = self.P_Y_base.cuda()
         
     def forward(self, theta):
-        warped_grid = self.apply_transformation(theta,torch.cat((self.grid_X,self.grid_Y),3))
+        points = torch.cat((self.grid_X,self.grid_Y),3)
+        warped_grid = self.apply_transformation(theta, points)
         
         return warped_grid
     
-    def compute_L_inverse(self,X,Y):
-        N = X.size()[0] # num of points (along dim 0)
+    def compute_L_inverse(self, X, Y):
+        # X = 25x1, Y = 25x1
+        # N = 25
+        N = X.size(0) # num of points (along dim 0)
         # construct matrix K
-        Xmat = X.expand(N,N)
-        Ymat = Y.expand(N,N)
-        P_dist_squared = torch.pow(Xmat-Xmat.transpose(0,1),2)+torch.pow(Ymat-Ymat.transpose(0,1),2)
-        P_dist_squared[P_dist_squared==0]=1 # make diagonal 1 to avoid NaN in log computation
-        K = torch.mul(P_dist_squared,torch.log(P_dist_squared))
+        Xmat = X.expand(-1, N) # 25x25
+        Ymat = Y.expand(-1, N) # 25x25
+
+        # 25x25
+        P_dist_squared = torch.pow(Xmat-Xmat.transpose(0,1), 2) + torch.pow(Ymat-Ymat.transpose(0,1), 2)
+        P_dist_squared[P_dist_squared==0] = 1 # make diagonal 1 to avoid NaN in log computation
+
+        # 25x25 * 25x25 = 25x25
+        K = torch.mul(P_dist_squared, torch.log(P_dist_squared))
+        
         # construct matrix L
-        O = torch.FloatTensor(N,1).fill_(1)
-        Z = torch.FloatTensor(3,3).fill_(0)       
-        P = torch.cat((O,X,Y),1)
-        L = torch.cat((torch.cat((K,P),1),torch.cat((P.transpose(0,1),Z),1)),0)
+        O = torch.FloatTensor(N,1).fill_(1) # 25x1 in 1
+        Z = torch.FloatTensor(3,3).fill_(0) # 3x1 in 0
+
+        P = torch.cat((O, X, Y), 1)
+        L = torch.cat((torch.cat((K, P), 1), torch.cat((P.transpose(0, 1), Z), 1)), 0)
+        
         Li = torch.inverse(L)
+
         if self.use_cuda:
             Li = Li.cuda()
+
         return Li
         
     def apply_transformation(self,theta,points):
@@ -481,4 +499,8 @@ def load_checkpoint(model, checkpoint_path):
     model.cuda()
 
 if __name__ == "__main__":
-    print(2 * 5**2)
+    A = torch.tensor([1, 2, 3])
+    B = torch.tensor([1, 2, 3])
+    C = torch.mul(A, B)
+    print(C)
+    pass

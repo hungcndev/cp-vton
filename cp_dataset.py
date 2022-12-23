@@ -66,6 +66,8 @@ class CPDataset(data.Dataset):
         
         # 256x192x3 -> 3x256x192
         c = self.transform(c)
+        if (c.shape[1], c.shape[2]) != (256, 192):
+            c = transforms.Resize((256, 192))(c)
 
         # 1x256x192 -> 256x192
         cm_array = np.array(cm)
@@ -97,8 +99,7 @@ class CPDataset(data.Dataset):
         parse_shape = parse_shape.resize((self.fine_width//16, self.fine_height//16))
         parse_shape = parse_shape.resize((self.fine_width, self.fine_height))
 
-        # shape = self.transform(parse_shape) # [-1,1]
-        shape = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5), (0.5))])(parse_shape)
+        shape = self.transform(parse_shape) # [-1,1]
         phead = torch.from_numpy(parse_head) # [0,1]
         pcm = torch.from_numpy(parse_cloth) # [0,1]
 
@@ -127,13 +128,11 @@ class CPDataset(data.Dataset):
             if pointx > 1 and pointy > 1:
                 draw.rectangle((pointx-r, pointy-r, pointx+r, pointy+r), 'white', 'white')
                 pose_draw.rectangle((pointx-r, pointy-r, pointx+r, pointy+r), 'white', 'white')
-            # one_map = self.transform(one_map)
-            one_map = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5), (0.5))])(one_map)
+            one_map = self.transform(one_map)
             pose_map[i] = one_map[0]
 
         # just for visualization
-        # im_pose = self.transform(im_pose)
-        im_pose = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5), (0.5))])(im_pose)
+        im_pose = self.transform(im_pose)
 
         # cloth-agnostic representation
         agnostic = torch.cat([shape, im_h, pose_map], 0) 

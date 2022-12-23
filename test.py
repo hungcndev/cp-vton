@@ -1,5 +1,6 @@
 #coding=utf-8
 import torch
+from torch.utils import data
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -8,6 +9,8 @@ import os
 from tqdm import tqdm
 import time
 from cp_dataset import CPDataset, CPDataLoader
+from FASCODE_IMAGE import FASCODE_IMAGE
+
 from networks import GMM, UnetGenerator, load_checkpoint
 
 from torch.utils.tensorboard import SummaryWriter
@@ -28,15 +31,15 @@ def get_opt():
     
     parser.add_argument("--dataroot", default = "data")
     parser.add_argument("--datamode", default = "test")
-    parser.add_argument("--stage", default = "GMM")
-    parser.add_argument("--data_list", default = "train_pairs.txt")
+    parser.add_argument("--stage", default = "TOM")
+    parser.add_argument("--data_list", default = "test_pairs.txt")
     parser.add_argument("--fine_width", type=int, default = 192)
     parser.add_argument("--fine_height", type=int, default = 256)
     parser.add_argument("--radius", type=int, default = 5)
     parser.add_argument("--grid_size", type=int, default = 5)
     parser.add_argument('--tensorboard_dir', type=str, default='tensorboard', help='save tensorboard infos')
     parser.add_argument('--result_dir', type=str, default='result', help='save result infos')
-    parser.add_argument('--checkpoint', type=str, default='checkpoints/test/TOM/gmm_final.pth', help='model checkpoint for test')
+    parser.add_argument('--checkpoint', type=str, default='checkpoints/TOM/tom_final.pth', help='model checkpoint for test')
     parser.add_argument("--display_count", type=int, default = 1)
     parser.add_argument("--shuffle", action='store_true', help='shuffle input data')
 
@@ -49,7 +52,7 @@ def test_gmm(opt, test_loader, model, board):
 
     base_name = os.path.basename(opt.checkpoint)
     # save_dir = os.path.join(opt.result_dir, base_name, opt.datamode)
-    save_dir = "data/test"
+    save_dir = "data/test/"
 
     # if not os.path.exists(save_dir):
     #     os.makedirs(save_dir)
@@ -62,7 +65,7 @@ def test_gmm(opt, test_loader, model, board):
     if not os.path.exists(warp_mask_dir):
         os.makedirs(warp_mask_dir)
 
-    for step, inputs in enumerate(test_loader.data_loader):
+    for step, inputs in tqdm(enumerate(test_loader.data_loader)):
         test_loader.data_loader.sampler.set_epoch(step)
         # iter_start_time = time.time()
         
@@ -91,13 +94,9 @@ def test_gmm(opt, test_loader, model, board):
 
         if (step+1) % opt.display_count == 0:
             board_add_images(board, 'combine', visuals, step+1)
-            # t = time.time() - iter_start_time
-            # print('step: %8d, time: %.3f' % (step+1, t), flush=True)
         
-
-
 def test_tom(opt, test_loader, model, board):
-    model = DDP(model.cuda(), [gpus_id]
+    model = DDP(model.cuda(), [gpus_id])
     model.eval()
     
     base_name = os.path.basename(opt.checkpoint)
@@ -109,10 +108,7 @@ def test_tom(opt, test_loader, model, board):
     if not os.path.exists(try_on_dir):
         os.makedirs(try_on_dir)
 
-    # print('Dataset size: %05d!' % (len(test_loader.dataset)), flush=True)
-
-    for step, inputs in enumerate(test_loader.data_loader):
-        # iter_start_time = time.time()
+    for step, inputs in tqdm(enumerate(test_loader.data_loader)):
         
         im_names = inputs['im_name']
         im = inputs['image'].cuda()
@@ -137,13 +133,9 @@ def test_tom(opt, test_loader, model, board):
         save_images(p_tryon, im_names, try_on_dir) 
         if (step+1) % opt.display_count == 0:
             board_add_images(board, 'combine', visuals, step+1)
-            # t = time.time() - iter_start_time
-            # print('step: %8d, time: %.3f' % (step+1, t), flush=True)
-
 
 def main():
     opt = get_opt()
-    print(opt)
     print("Start to test stage: %s, named: %s!" % (opt.stage, opt.name))
    
     # create dataset 
