@@ -20,8 +20,8 @@ class CPDataset(data.Dataset):
         self.opt = opt
         self.root = opt.dataroot
         self.datamode = opt.datamode # train or test or self-defined
-        self.stage = opt.stage # GMM or TOM
-        self.data_list = opt.data_list
+        # self.stage = opt.stage # GMM or TOM
+        self.data_list = f"{opt.datamode}_pairs.txt"
         self.fine_height = opt.fine_height
         self.fine_width = opt.fine_width
         self.radius = opt.radius
@@ -38,7 +38,7 @@ class CPDataset(data.Dataset):
         im_names = []
         c_names = []
 
-        with open(os.path.join(opt.dataroot, opt.data_list), 'r') as f:
+        with open(os.path.join(opt.dataroot, self.data_list), 'r') as f:
             for line in f.readlines():
                 im_name, c_name = line.strip().split()
                 im_names.append(im_name)
@@ -57,12 +57,15 @@ class CPDataset(data.Dataset):
         im_name = self.im_names[index]
 
         # cloth image & cloth mask
-        if self.stage == 'GMM': #Geometric Matching Module
-            c = Image.open(os.path.join(self.data_path, 'cloth', c_name))
-            cm = Image.open(os.path.join(self.data_path, 'cloth-mask', c_name))
-        else:  # Try-on Module
-            c = Image.open(os.path.join(self.data_path, 'warp-cloth', c_name))
-            cm = Image.open(os.path.join(self.data_path, 'warp-mask', c_name))
+        # if self.stage == 'GMM': #Geometric Matching Module
+        #     c = Image.open(os.path.join(self.data_path, 'cloth', c_name))
+        #     cm = Image.open(os.path.join(self.data_path, 'cloth-mask', c_name))
+        # else:  # Try-on Module
+        #     c = Image.open(os.path.join(self.data_path, 'warp-cloth', c_name))
+        #     cm = Image.open(os.path.join(self.data_path, 'warp-mask', c_name))
+        
+        c = Image.open(os.path.join(self.data_path, 'cloth', c_name))
+        cm = Image.open(os.path.join(self.data_path, 'cloth-mask', c_name))
         
         # 256x192x3 -> 3x256x192
         c = self.transform(c)
@@ -137,12 +140,15 @@ class CPDataset(data.Dataset):
         # cloth-agnostic representation
         agnostic = torch.cat([shape, im_h, pose_map], 0) 
 
-        if self.stage == 'GMM':
-            im_g = Image.open('grid.png')
-            im_g = self.transform(im_g)
-        else:
-            im_g = ''
+        # if self.stage == 'GMM':
+        #     im_g = Image.open('grid.png')
+        #     im_g = self.transform(im_g)
+        # else:
+        #     im_g = ''
 
+        im_g = Image.open('grid.png')
+        im_g = self.transform(im_g)
+        
         result = {
             'c_name':   c_name,     # for visualization
             'im_name':  im_name,    # for visualization or ground truth

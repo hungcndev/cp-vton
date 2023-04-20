@@ -20,12 +20,11 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 dist.init_process_group("nccl")
-gpus_id = int(os.environ["LOCAL_RANK"])
+gpus_id = dist.get_rank()
 
 def get_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument("--name", default = "TOM")
-    parser.add_argument("--gpu_ids", default = "")
     parser.add_argument('-j', '--workers', type=int, default=6)
     parser.add_argument('-b', '--batch-size', type=int, default=4)
     
