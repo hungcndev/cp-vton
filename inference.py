@@ -16,21 +16,17 @@ from cp_dataset import CPDataset
 
 from networks import GMM, UnetGenerator
 
-from torch.utils.tensorboard import SummaryWriter
-
 
 dist.init_process_group("nccl")
 gpus_id = dist.get_rank()
 
 def get_opt():
     parser = argparse.ArgumentParser()
-    # parser.add_argument("--name", default = "TOM")
-    parser.add_argument('-j', '--num_workers', type=int, default=6)
+    parser.add_argument('-j', '--num_workers', type=int, default=2)
     parser.add_argument('-b', '--batch-size', type=int, default=1)
     
     parser.add_argument("--dataroot", default = "data")
     parser.add_argument("--datamode", default = "train")
-    # parser.add_argument("--stage", default = "TOM")
     # parser.add_argument("--data_list", default = "test_pairs.txt")
     parser.add_argument("--fine_width", type=int, default = 192)
     parser.add_argument("--fine_height", type=int, default = 256)
@@ -38,9 +34,7 @@ def get_opt():
     parser.add_argument("--grid_size", type=int, default = 5)
     parser.add_argument('--tensorboard_dir', type=str, default='tensorboard', help='save tensorboard infos')
     parser.add_argument('--result_dir', type=str, default='result', help='save result infos')
-    # parser.add_argument('--checkpoint', type=str, default='checkpoints/TOM/tom_final.pth', help='model checkpoint for test')
     parser.add_argument("--display_count", type=int, default = 1)
-    # parser.add_argument("--shuffle", action='store_true', help='shuffle input data')
 
     opt = parser.parse_args()
     return opt
@@ -78,8 +72,6 @@ if __name__ == "__main__":
     
     model_GMM.eval()
     model_TOM.eval()
-    
-    # writer = SummaryWriter(tensorboard_path)
     
     for batch in tqdm(dataloader):
         with torch.no_grad():
