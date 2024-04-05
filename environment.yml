@@ -1,3 +1,4 @@
+# Evironment config for Anaconda setup
 name: cp-vton
 channels:
   - pytorch

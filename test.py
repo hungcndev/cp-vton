@@ -50,11 +50,7 @@ def test_gmm(opt, test_loader, model, board):
     model.eval()
 
     base_name = os.path.basename(opt.checkpoint)
-    # save_dir = os.path.join(opt.result_dir, base_name, opt.datamode)
     save_dir = "data/test/"
-
-    # if not os.path.exists(save_dir):
-    #     os.makedirs(save_dir)
 
     warp_cloth_dir = os.path.join(save_dir, 'warp-cloth')
     warp_mask_dir = os.path.join(save_dir, 'warp-mask')

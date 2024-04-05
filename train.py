@@ -38,7 +38,7 @@ def get_opt():
     parser.add_argument('--checkpoint_dir', type=str, default='checkpoints', help='save checkpoint infos')
     parser.add_argument('--checkpoint', type=str, default='', help='model checkpoint for initialization')
     parser.add_argument("--display_count", type=int, default = 20)
-    parser.add_argument("--save_count", type=int, default = 100)
+    parser.add_argument("--save_count", type=int, default = 1000)
     parser.add_argument("--keep_step", type=int, default = 100000)
     parser.add_argument("--decay_step", type=int, default = 100000)
     parser.add_argument("--shuffle", action='store_true', help='shuffle input data')
@@ -55,8 +55,6 @@ def train_gmm(opt, train_loader, model, board):
     
     # optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(0.5, 0.999))
-    # scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = lambda step: 1.0 -
-    #         max(0, step - opt.keep_step) / float(opt.decay_step + 1))
     
     for epoch in tqdm(range(opt.keep_step + opt.decay_step)):
         train_loader.data_loader.sampler.set_epoch(epoch)
@@ -91,7 +89,7 @@ def train_gmm(opt, train_loader, model, board):
             board.add_scalar('metric', loss.item(), epoch+1)
 
         if (epoch+1) % opt.save_count == 0:
-            save_checkpoint(model, os.path.join(opt.checkpoint_dir, opt.name, 'step_%06d.pth' % (epoch+1)))
+            save_checkpoint(model.module, os.path.join(opt.checkpoint_dir, opt.name, 'step_%06d.pth' % (epoch+1)))
 
 
 def train_tom(opt, train_loader, model, board):
@@ -147,7 +145,7 @@ def train_tom(opt, train_loader, model, board):
             board.add_scalar('MaskL1', loss_mask.item(), step+1)
 
         if (step+1) % opt.save_count == 0:
-            save_checkpoint(model, os.path.join(opt.checkpoint_dir, opt.name, 'step_%06d.pth' % (step+1)))
+            save_checkpoint(model.module, os.path.join(opt.checkpoint_dir, opt.name, 'step_%06d.pth' % (step+1)))
 
 
 
