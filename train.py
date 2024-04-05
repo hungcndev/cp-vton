@@ -1,4 +1,6 @@
-#coding=utf-8
+# This script is for training the GMM and TOM models on dataset.
+
+# Importing necessary libraries
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -16,9 +18,13 @@ from visualization import board_add_image, board_add_images
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 
+
+# Initialize distributed processing group
 dist.init_process_group("nccl")
 gpus_id = int(os.environ["LOCAL_RANK"])
 
+
+# Get command-line arguments
 def get_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument("--name", default = "GMM")
@@ -50,10 +56,10 @@ def train_gmm(opt, train_loader, model, board):
     model = DDP(model.to(gpus_id), [gpus_id])
     model.train()
 
-    # criterion
+    # Criterion
     criterionL1 = nn.L1Loss()
     
-    # optimizer
+    # Optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(0.5, 0.999))
     
     for epoch in tqdm(range(opt.keep_step + opt.decay_step)):
@@ -96,12 +102,12 @@ def train_tom(opt, train_loader, model, board):
     model = DDP(model.to(gpus_id), [gpus_id])
     model.train()
     
-    # criterion
+    # Criterion
     criterionL1 = nn.L1Loss()
     criterionVGG = VGGLoss()
     criterionMask = nn.L1Loss()
     
-    # optimizer
+    # Optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(0.5, 0.999))
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = lambda step: 1.0 -
             max(0, step - opt.keep_step) / float(opt.decay_step + 1))
@@ -153,31 +159,31 @@ def main():
     opt = get_opt()
     print("Start to train stage: %s, named: %s!" % (opt.stage, opt.name))
    
-    # create dataset 
+    # Create dataset 
     train_dataset = CPDataset(opt)
 
-    # create dataloader
+    # Create dataloader
     train_loader = CPDataLoader(opt, train_dataset)
 
-    # visualization
+    # Visualization
     if not os.path.exists(opt.tensorboard_dir):
         os.makedirs(opt.tensorboard_dir)
 
     writer = SummaryWriter(os.path.join(opt.tensorboard_dir, opt.name))
     
-    # create model & train & save the final checkpoint
+    # Create model & train & save the final checkpoint
     if opt.stage == 'GMM':
         model = GMM(opt)
         if not opt.checkpoint =='' and os.path.exists(opt.checkpoint):
             load_checkpoint(model, opt.checkpoint)
         train_gmm(opt, train_loader, model, writer)
-        save_checkpoint(model, os.path.join(opt.checkpoint_dir, opt.name, 'gmm_final.pth'))
+        save_checkpoint(model.module, os.path.join(opt.checkpoint_dir, opt.name, 'gmm_final.pth'))
     elif opt.stage == 'TOM':
         model = UnetGenerator(25, 4, 6, ngf=64, norm_layer=nn.InstanceNorm2d)
         if not opt.checkpoint =='' and os.path.exists(opt.checkpoint):
             load_checkpoint(model, opt.checkpoint)
         train_tom(opt, train_loader, model, writer)
-        save_checkpoint(model, os.path.join(opt.checkpoint_dir, opt.name, 'tom_final.pth'))
+        save_checkpoint(model.module, os.path.join(opt.checkpoint_dir, opt.name, 'tom_final.pth'))
     else:
         raise NotImplementedError('Model [%s] is not implemented' % opt.stage)
         

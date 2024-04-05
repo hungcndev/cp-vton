@@ -1,4 +1,6 @@
-#coding=utf-8
+#
+
+# Import necessary libraries
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -16,10 +18,12 @@ from cp_dataset import CPDataset
 
 from networks import GMM, UnetGenerator
 
-
+# Initialize distributed processing group
 dist.init_process_group("nccl")
 gpus_id = dist.get_rank()
 
+
+# Get command-line arguments
 def get_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument('-j', '--num_workers', type=int, default=2)
@@ -42,10 +46,10 @@ def get_opt():
 if __name__ == "__main__":
     opt = get_opt()
     
-    # create dataset 
+    # Create dataset 
     dataset = CPDataset(opt)
 
-    # create dataloader
+    # Create dataloader
     dataloader = DataLoader(dataset = dataset, 
                              batch_size = opt.batch_size, 
                              sampler=DistributedSampler(dataset),
@@ -54,6 +58,8 @@ if __name__ == "__main__":
                              )
     
     now = datetime.datetime.now()
+
+    # Set up paths for saving results and checkpoints
     now_path = os.path.join(now.strftime("%Y%m%d"), now.strftime("%H:%M:%S"))
     tensorboard_path = os.path.join(opt.tensorboard_dir, now_path)
     result_path = os.path.join(opt.result_dir, now_path)
@@ -62,6 +68,7 @@ if __name__ == "__main__":
     
     os.makedirs(result_path, exist_ok=True)
     
+    # Load pre-trained models and convert them to GPU mode
     model_GMM = GMM(opt)
     model_GMM.load_state_dict(torch.load(checkpoint_GMM_path))
     model_GMM = DDP(model_GMM.to(gpus_id), [gpus_id])
@@ -87,16 +94,18 @@ if __name__ == "__main__":
             im_c =  batch['parse_cloth'].to(gpus_id)
             im_g = batch['grid_image'].to(gpus_id)
             
+            # Generate warped clothing and mask using GMM
             grid, _ = model_GMM(agnostic, c)
-            
             c = F.grid_sample(c, grid, padding_mode='border', align_corners=True)
             cm = F.grid_sample(cm, grid, padding_mode='zeros', align_corners=True)
             im_g = F.grid_sample(im_g, grid, padding_mode='zeros', align_corners=True)
             
+            # Generate final try-on results using TOM
             outputs = model_TOM(torch.cat([agnostic, c], 1))
             p_rendered, m_composite = torch.split(outputs, 3,1)
             p_rendered = torch.tanh(p_rendered)
             m_composite = torch.sigmoid(m_composite)
             p_tryon = c * m_composite + p_rendered * (1 - m_composite)
             
+            # Save try-on results as images
             transforms.ToPILImage()(make_grid(p_tryon, normalize=True)).save(os.path.join(result_path, im_names[0].split("_0")[0]+".png"))

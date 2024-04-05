@@ -3,5 +3,4 @@ tensorboard/*
 data/train/*
 data/test/*
 log/*
-*.sh
 result/*/*

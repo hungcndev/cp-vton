@@ -1,26 +1,39 @@
+# Includes utility functions for visualizing and saving image tensors during model training and testing
+
+# Import necessary libraries
 from torch.utils.tensorboard import SummaryWriter
 import torch
 from PIL import Image
 import os
 
+
+# Preprocess image tensor for tensorboard visualization
 def tensor_for_board(img_tensor):
-    # map into [0,1]
+    # Map values into [0, 1] range
     tensor = (img_tensor.clone()+1) * 0.5
     tensor.cpu().clamp(0,1)
 
+    # If image tensor has only one channel, repeat it to form a 3-channel image
     if tensor.size(1) == 1:
         tensor = tensor.repeat(1,3,1,1)
 
     return tensor
 
+# Preprocess list of image tensors for tensorboard visualization
 def tensor_list_for_board(img_tensors_list):
+    # Determine grid dimensions
     grid_h = len(img_tensors_list)
     grid_w = max(len(img_tensors)  for img_tensors in img_tensors_list)
     
+    # Get dimensions of individual image tensors
     batch_size, channel, height, width = tensor_for_board(img_tensors_list[0][0]).size()
+
     canvas_h = grid_h * height
     canvas_w = grid_w * width
+    # Create a canvas tensor filled with neutral gray
     canvas = torch.FloatTensor(batch_size, channel, canvas_h, canvas_w).fill_(0.5)
+
+    # Place image tensors on the canvas
     for i, img_tensors in enumerate(img_tensors_list):
         for j, img_tensor in enumerate(img_tensors):
             offset_h = i * height
@@ -36,13 +49,15 @@ def board_add_image(board, tag_name, img_tensor, step_count):
     for i, img in enumerate(tensor):
         board.add_image('%s/%03d' % (tag_name, i), img, step_count)
 
-
+# Add a list of result images to tensorboard as a grid
 def board_add_images(board, tag_name, img_tensors_list, step_count):
     tensor = tensor_list_for_board(img_tensors_list)
 
+    # Add image to tensorboard
     for i, img in enumerate(tensor):
         board.add_image('%s/%03d' % (tag_name, i), img, step_count)
 
+# Save images from tensor to disk
 def save_images(img_tensors, img_names, save_dir):
     for img_tensor, img_name in zip(img_tensors, img_names):
         tensor = (img_tensor.clone()+1)*0.5 * 255

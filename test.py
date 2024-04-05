@@ -1,4 +1,6 @@
-#coding=utf-8
+# This script is for running each GMM or TOM model on dataset for testing
+
+# Importing necessary libraries
 import torch
 from torch.utils import data
 import torch.nn as nn
@@ -18,9 +20,13 @@ from visualization import board_add_image, board_add_images, save_images
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 
+
+# Initialize distributed processing group
 dist.init_process_group("nccl")
 gpus_id = dist.get_rank()
 
+
+# Get command-line arguments
 def get_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument("--name", default = "TOM")
@@ -133,27 +139,27 @@ def main():
     print("Start to test stage: %s, named: %s!" % (opt.stage, opt.name))
    
     # create dataset 
-    train_dataset = CPDataset(opt)
+    dataset = CPDataset(opt)
 
     # create dataloader
-    train_loader = CPDataLoader(opt, train_dataset)
+    loader = CPDataLoader(opt, dataset)
 
     # visualization
     if not os.path.exists(opt.tensorboard_dir):
         os.makedirs(opt.tensorboard_dir)
     board = SummaryWriter(log_dir = os.path.join(opt.tensorboard_dir, opt.name))
    
-    # create model & train
+    # create model & test
     if opt.stage == 'GMM':
         model = GMM(opt)
         load_checkpoint(model, opt.checkpoint)
         with torch.no_grad():
-            test_gmm(opt, train_loader, model, board)
+            test_gmm(opt, loader, model, board)
     elif opt.stage == 'TOM':
         model = UnetGenerator(25, 4, 6, ngf=64, norm_layer=nn.InstanceNorm2d)
         load_checkpoint(model, opt.checkpoint)
         with torch.no_grad():
-            test_tom(opt, train_loader, model, board)
+            test_tom(opt, loader, model, board)
     else:
         raise NotImplementedError('Model [%s] is not implemented' % opt.stage)
   
